@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 """
-Lumina Network – Vertiefter Node-Prototyp
-=========================================
+Lumina Network – Vertiefter Node-Prototyp (v0.2.1)
+=================================================
 
 Kapitel-Bezug:
   - Nachrichtenformate (Kapitel 4)
   - Yggdrasil / Ironwood Integration (Kapitel 5 + 6)
 
-Features dieses Prototyps:
+Features:
   • Vollständiger signierter Header + Body (Ed25519)
   • Alle Kern-Nachrichtentypen: HELLO, HEARTBEAT, GOSSIP, DATA, ACK, FIND_NODE
   • Echte Signatur-Verifikation
-  • Simulierte Ironwood/Yggdrasil-Transportschicht (PacketConn-ähnlich)
+  • Simulierte Ironwood/Yggdrasil-Transportschicht
   • Multi-Node-Simulation mit shared Network-Bus
   • Peer-Management + einfache Discovery
   • Path-Notify-ähnliche Callbacks
-  • Konfigurierbare Timeouts & Metriken
+  • Stabile Auto-Reply-Logik (kein HELLO-Ping-Pong mehr)
 
 Abhängigkeit: pip install pynacl
-
-Späterer Ausbau:
-  - Echte Anbindung an ironwood / yggdrasil-ng / ygg_stream
-  - CBOR statt JSON
-  - Async (asyncio / trio)
 """
 
 from __future__ import annotations
@@ -31,9 +26,8 @@ import hashlib
 import json
 import struct
 import time
-import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 try:
     from nacl.signing import SigningKey, VerifyKey
@@ -76,21 +70,15 @@ MSG_NAMES = {
 
 @dataclass
 class SimulatedPacket:
-    """Ein Paket, das über die simulierte PacketConn geht."""
-    src_key: bytes          # 32-byte public key
-    dst_key: Optional[bytes]  # None = Broadcast
+    src_key: bytes
+    dst_key: Optional[bytes]
     payload: bytes
     timestamp: float = field(default_factory=time.time)
 
 
 class SimulatedIronwood:
-    """
-    Sehr vereinfachte Simulation einer Ironwood PacketConn.
-    Alle Nodes teilen sich denselben Bus (für Standalone-Tests).
-    """
-
     def __init__(self):
-        self._nodes: Dict[bytes, "LuminaNode"] = {}  # pubkey -> node
+        self._nodes: Dict[bytes, "LuminaNode"] = {}
         self._path_notify_callbacks: List[Callable[[bytes, bytes], None]] = []
 
     def register(self, node: "LuminaNode") -> None:
@@ -103,15 +91,13 @@ class SimulatedIronwood:
         pkt = SimulatedPacket(src_key=src_key, dst_key=dst_key, payload=payload)
 
         if dst_key is None:
-            # Broadcast an alle außer dem Sender
-            for key, node in self._nodes.items():
+            for key, node in list(self._nodes.items()):
                 if key != src_key:
                     node._on_packet(pkt)
         else:
             target = self._nodes.get(dst_key)
             if target:
                 target._on_packet(pkt)
-                # Simuliere path_notify
                 for cb in self._path_notify_callbacks:
                     cb(src_key, dst_key)
 
@@ -122,7 +108,6 @@ class SimulatedIronwood:
         return [k for k in self._nodes if k != exclude]
 
 
-# Globaler Bus für die Demo
 NETWORK = SimulatedIronwood()
 
 
@@ -138,6 +123,7 @@ class PeerInfo:
     last_seen: float = field(default_factory=time.time)
     rtt_ms: float = 0.0
     capabilities: List[str] = field(default_factory=list)
+    hello_replied: bool = False   # verhindert HELLO-Ping-Pong
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +134,7 @@ class PeerInfo:
 class LuminaNode:
     name: str
     signing_key: SigningKey = field(default_factory=SigningKey.generate)
-    peers: Dict[bytes, PeerInfo] = field(default_factory=dict)  # pubkey -> PeerInfo
+    peers: Dict[bytes, PeerInfo] = field(default_factory=dict)
     msg_counter: int = 0
     seq: int = 0
     start_time: float = field(default_factory=time.time)
@@ -156,10 +142,6 @@ class LuminaNode:
 
     def __post_init__(self):
         NETWORK.register(self)
-
-    # ------------------------------------------------------------------
-    # Identität
-    # ------------------------------------------------------------------
 
     @property
     def public_key(self) -> bytes:
@@ -173,10 +155,6 @@ class LuminaNode:
     def short_id(self) -> str:
         return self.node_id.hex()[:12]
 
-    # ------------------------------------------------------------------
-    # Header + Signatur (Kapitel 4)
-    # ------------------------------------------------------------------
-
     def _next_msg_id(self) -> int:
         self.msg_counter += 1
         return (int(time.time_ns()) ^ self.msg_counter) & 0xFFFFFFFFFFFFFFFF
@@ -186,7 +164,6 @@ class LuminaNode:
         msg_id = self._next_msg_id()
         timestamp = time.time_ns()
 
-        # Header ohne Signatur (58 Bytes)
         header_wo_sig = struct.pack(
             ">2sBBHIQQ32s",
             MAGIC,
@@ -200,7 +177,7 @@ class LuminaNode:
         )
 
         to_sign = header_wo_sig + body_bytes
-        signature = self.signing_key.sign(to_sign).signature  # 64 Bytes
+        signature = self.signing_key.sign(to_sign).signature
 
         full = header_wo_sig + signature + body_bytes
         return full, msg_id
@@ -225,19 +202,13 @@ class LuminaNode:
         if len(body) != length:
             return None
 
-        # Signatur prüfen – wir brauchen den Public Key des Senders
-        # In der echten Welt kommt er aus dem DHT / Peer-Store.
-        # Hier suchen wir zuerst in bekannten Peers, sonst akzeptieren wir
-        # den Key aus dem Body (bei HELLO) oder lehnen ab.
         verify_key: Optional[VerifyKey] = None
 
-        # Versuch 1: bereits bekannter Peer
         for peer in self.peers.values():
             if peer.node_id == sender_id:
                 verify_key = VerifyKey(peer.public_key)
                 break
 
-        # Versuch 2: Body enthält public_key (typisch bei HELLO)
         body_data: Dict[str, Any] = {}
         try:
             body_data = json.loads(body.decode()) if body else {}
@@ -252,7 +223,6 @@ class LuminaNode:
                 pass
 
         if verify_key is None:
-            # Unbekannter Sender ohne Key → vorerst ablehnen
             return None
 
         try:
@@ -272,17 +242,13 @@ class LuminaNode:
             "raw_length": len(raw),
         }
 
-    # ------------------------------------------------------------------
-    # Nachrichten erstellen
-    # ------------------------------------------------------------------
-
     def create_hello(self) -> bytes:
         body = {
             "node_id": self.node_id.hex(),
             "public_key": self.public_key.hex(),
             "name": self.name,
             "capabilities": ["routing", "gossip", "agent", "gateway"],
-            "software_version": "0.2.0-proto",
+            "software_version": "0.2.1-proto",
             "uptime_s": int(time.time() - self.start_time),
         }
         msg, _ = self._build_signed_message(MSG_HELLO, body)
@@ -330,10 +296,6 @@ class LuminaNode:
         msg, _ = self._build_signed_message(MSG_FIND_NODE, body)
         return msg
 
-    # ------------------------------------------------------------------
-    # Senden über simulierte Ironwood-Schicht
-    # ------------------------------------------------------------------
-
     def send_to(self, dst_key: Optional[bytes], raw: bytes) -> None:
         NETWORK.send(self.public_key, dst_key, raw)
 
@@ -346,18 +308,15 @@ class LuminaNode:
     def send_heartbeat(self, dst_key: Optional[bytes] = None) -> None:
         self.send_to(dst_key, self.create_heartbeat())
 
-    # ------------------------------------------------------------------
-    # Empfang
-    # ------------------------------------------------------------------
-
     def _on_packet(self, pkt: SimulatedPacket) -> None:
         parsed = self._parse_and_verify(pkt.payload)
         if not parsed:
             return
 
-        # Peer aktualisieren / anlegen
         sender_key = parsed["sender_key"]
-        if sender_key not in self.peers:
+        is_new_peer = sender_key not in self.peers
+
+        if is_new_peer:
             self.peers[sender_key] = PeerInfo(
                 public_key=sender_key,
                 node_id=bytes.fromhex(parsed["sender_id"]),
@@ -369,23 +328,20 @@ class LuminaNode:
             if "name" in parsed["body"]:
                 self.peers[sender_key].name = parsed["body"]["name"]
 
-        # Optionales User-Callback
         if self.on_message:
             self.on_message(self, parsed)
 
-        # Automatische Antworten
-        if parsed["msg_type"] == MSG_HELLO:
-            # Höflichkeits-HELLO zurück
-            self.send_hello(dst_key=sender_key)
+        # Stabile Auto-Reply-Logik
+        if parsed["msg_type"] == MSG_HELLO and is_new_peer:
+            # Nur beim allerersten Kontakt einmal antworten
+            peer = self.peers[sender_key]
+            if not peer.hello_replied:
+                peer.hello_replied = True
+                self.send_hello(dst_key=sender_key)
 
         elif parsed["msg_type"] == MSG_HEARTBEAT:
-            # ACK zurück
             ack = self.create_ack(parsed["msg_id"])
             self.send_to(sender_key, ack)
-
-    # ------------------------------------------------------------------
-    # Hilfsfunktionen
-    # ------------------------------------------------------------------
 
     def known_peers(self) -> List[str]:
         return [f"{p.name or p.node_id.hex()[:8]} ({p.public_key.hex()[:8]}…)" for p in self.peers.values()]
@@ -398,13 +354,9 @@ class LuminaNode:
 # Demo
 # ---------------------------------------------------------------------------
 
-def pretty(msg: Dict[str, Any]) -> str:
-    return json.dumps(msg, indent=2, ensure_ascii=False)
-
-
 def demo():
     print("=" * 64)
-    print("  Lumina Network – Vertiefter Node-Prototyp (v0.2)")
+    print("  Lumina Network – Vertiefter Node-Prototyp (v0.2.1)")
     print("=" * 64)
     print()
 
@@ -421,23 +373,19 @@ def demo():
     print(f"Carol  Node-ID : {carol.short_id}…")
     print()
 
-    # 1. Alice broadcastet HELLO → Bob & Carol lernen sie kennen
     print("— Alice broadcastet HELLO —")
     alice.send_hello()
     print()
 
-    # 2. Bob sendet HEARTBEAT an Alice
     print("— Bob sendet HEARTBEAT an Alice —")
     bob.send_heartbeat(dst_key=alice.public_key)
     print()
 
-    # 3. Carol sendet DATA an Bob
     print("— Carol sendet DATA an Bob —")
     data_msg = carol.create_data("text/plain", "Hallo vom Nexus-Schwarm, Sir.")
     carol.send_to(bob.public_key, data_msg)
     print()
 
-    # 4. Gossip von Alice
     print("— Alice sendet GOSSIP —")
     gossip = alice.create_gossip([
         {"type": "peer_up", "node_id": bob.node_id.hex(), "data": {"name": "Bob"}},
@@ -446,7 +394,6 @@ def demo():
     alice.broadcast(gossip)
     print()
 
-    # Status
     print("=" * 64)
     print("Aktuelle Peer-Tabellen:")
     print(f"  Alice kennt : {alice.known_peers()}")
@@ -454,7 +401,6 @@ def demo():
     print(f"  Carol kennt : {carol.known_peers()}")
     print("=" * 64)
 
-    # Aufräumen
     alice.shutdown()
     bob.shutdown()
     carol.shutdown()
