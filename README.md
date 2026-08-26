@@ -28,12 +28,13 @@ Lumina Network is a modular, self-healing P2P network featuring:
 | 4 | [Nachrichtenformate im Detail](docs/04-nachrichtenformate.md) | [Message Formats in Detail](docs/en/04-message-formats.md) | ✅ |
 | 5 | [Yggdrasil-Integration](docs/05-yggdrasil-integration.md) | [Yggdrasil Integration](docs/en/05-yggdrasil-integration.md) | ✅ |
 | 6 | [Ironwood-Konfiguration](docs/06-ironwood-konfiguration.md) | [Ironwood Configuration](docs/en/06-ironwood-configuration.md) | ✅ |
+| 7 | [Kademlia-Implementierungsdetails](docs/07-kademlia-implementierungsdetails.md) | [Kademlia Implementation Details](docs/en/07-kademlia-implementation-details.md) | ✅ |
 
 ## Code Prototypes / Code-Prototypen
 
 | Path | Description |
 |------|-------------|
-| `prototypes/lumina_node.py` | First minimal node skeleton (message formats + simulated Yggdrasil layer) |
+| `prototypes/lumina_node.py` | Vertiefter Node-Prototyp v0.2.1 (Message-Layer + simulierte Ironwood-Schicht) |
 
 ## Quality Goals / Qualitätsziele
 
