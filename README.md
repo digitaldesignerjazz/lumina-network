@@ -16,7 +16,7 @@ Lumina Network is a modular, self-healing P2P network featuring:
 - Swarm intelligence layer (Iktrasier)
 - AI agent orchestration
 - Gateway layer for external systems
-- **Yggdrasil as primary transport underlay**
+- **Yggdrasil / Ironwood as primary transport underlay**
 
 ## Documentation / Dokumentation
 
@@ -27,6 +27,7 @@ Lumina Network is a modular, self-healing P2P network featuring:
 | 3 | [Routing-Architektur](docs/03-routing-architektur.md) | [Routing Architecture](docs/en/03-routing-architecture.md) | ✅ |
 | 4 | [Nachrichtenformate im Detail](docs/04-nachrichtenformate.md) | [Message Formats in Detail](docs/en/04-message-formats.md) | ✅ |
 | 5 | [Yggdrasil-Integration](docs/05-yggdrasil-integration.md) | [Yggdrasil Integration](docs/en/05-yggdrasil-integration.md) | ✅ |
+| 6 | [Ironwood-Konfiguration](docs/06-ironwood-konfiguration.md) | [Ironwood Configuration](docs/en/06-ironwood-configuration.md) | ✅ |
 
 ## Code Prototypes / Code-Prototypen
 
