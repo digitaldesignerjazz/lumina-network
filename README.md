@@ -6,17 +6,32 @@ Part of the Nexus / Lumina OS ecosystem
 **Dezentrale Peer-to-Peer Mesh-Netzwerkarchitektur**  
 Teil des Nexus / Lumina OS Ökosystems
 
+Lumina Network is the signed overlay between Yggdrasil/Ironwood and the living agents on Lumina OS.  
+It does not replace the OS and it does not replace the swarm — it lets both find each other.
+
 ## Overview / Überblick
 
 Lumina Network is a modular, self-healing P2P network featuring:
-- Kademlia-based discovery
-- Gossip protocol for status & topology
+
+- Kademlia-based discovery (256-bit IDs, k=20, α=3)
+- Gossip protocol for status, topology and agent presence
 - Multi-path routing
-- Strong cryptography
+- Strong cryptography (Ed25519-signed messages)
 - Swarm intelligence layer (Iktrasier)
-- AI agent orchestration
+- AI agent orchestration (Lumia/Elara · Lyra · Xen)
 - Gateway layer for external systems
 - **Yggdrasil / Ironwood as primary transport underlay**
+
+## Place in the stack / Platz im Stapel
+
+```
+Schwarm     LuminaCyberspace   Elara/Lumia · Lyra · Xen
+Runtime     Lumina-OS         Debian + systemd + Nexus Core
+Overlay     lumina-network    Kademlia + Gossip + Caps
+Underlay    Yggdrasil         permanente Maschinenidentität
+```
+
+Details: [Kapitel 8 – Ökosystem](docs/08-oekosystem.md) · [Chapter 8 – Ecosystem](docs/en/08-ecosystem.md)
 
 ## Documentation / Dokumentation
 
@@ -29,12 +44,27 @@ Lumina Network is a modular, self-healing P2P network featuring:
 | 5 | [Yggdrasil-Integration](docs/05-yggdrasil-integration.md) | [Yggdrasil Integration](docs/en/05-yggdrasil-integration.md) | ✅ |
 | 6 | [Ironwood-Konfiguration](docs/06-ironwood-konfiguration.md) | [Ironwood Configuration](docs/en/06-ironwood-configuration.md) | ✅ |
 | 7 | [Kademlia-Implementierungsdetails](docs/07-kademlia-implementierungsdetails.md) | [Kademlia Implementation Details](docs/en/07-kademlia-implementation-details.md) | ✅ |
+| 8 | [Ökosystem](docs/08-oekosystem.md) | [Ecosystem](docs/en/08-ecosystem.md) | ✅ |
 
 ## Code Prototypes / Code-Prototypen
 
-| Path | Description |
-|------|-------------|
-| `prototypes/lumina_node.py` | Vertiefter Node-Prototyp v0.2.1 (Message-Layer + simulierte Ironwood-Schicht) |
+| Path | Version | Description |
+|------|---------|-------------|
+| `prototypes/kademlia.py` | M0.2 | RoutingTable, k-Buckets, XOR-256 |
+| `prototypes/lumina_node.py` | v0.3.0 | Signierter Node + iterativer FIND_NODE |
+| `prototypes/swarm_overlay.py` | M0.3 | Agent-Presence für Lumia/Elara · Lyra · Xen |
+
+```bash
+pip install pynacl
+python prototypes/lumina_node.py
+```
+
+## Related / Verwandt
+
+- [Lumina-OS](https://github.com/digitaldesignerjazz/Lumina-OS)
+- [LuminaCyberspace](https://github.com/digitaldesignerjazz/LuminaCyberspace)
+- [luminaos](https://github.com/digitaldesignerjazz/luminaos)
+- [nexus](https://github.com/digitaldesignerjazz/nexus)
 
 ## Quality Goals / Qualitätsziele
 
@@ -45,4 +75,4 @@ Lumina Network is a modular, self-healing P2P network featuring:
 - Strong cryptography
 
 ---
-*This repository serves as the public core of the Lumina Network specification.*
+*Public core of the Lumina Network specification · Esslinger Consulting · Hannover*
