@@ -13,6 +13,7 @@ Lumina Network ist ein modular aufgebautes, selbstheilendes P2P-Netzwerk mit:
 - Schwarmintelligenz-Schicht (Iktrasier)
 - KI-Agenten-Orchestrierung
 - Gateway-Layer für externe Systeme
+- **Yggdrasil als primärer Transport-Underlay**
 
 ## Dokumentation
 
@@ -21,6 +22,14 @@ Lumina Network ist ein modular aufgebautes, selbstheilendes P2P-Netzwerk mit:
 | 1 | [Systemarchitektur](docs/01-systemarchitektur.md) | ✅ |
 | 2 | [Netzwerkarchitektur](docs/02-netzwerkarchitektur.md) | ✅ |
 | 3 | [Routing-Architektur](docs/03-routing-architektur.md) | ✅ |
+| 4 | [Nachrichtenformate im Detail](docs/04-nachrichtenformate.md) | ✅ |
+| 5 | [Yggdrasil-Integration](docs/05-yggdrasil-integration.md) | ✅ |
+
+## Code-Prototypen
+
+| Pfad | Beschreibung |
+|------|--------------|
+| `prototypes/lumina_node.py` | Erster minimaler Node-Skeleton (Nachrichtenformate + simulierte Yggdrasil-Schicht) |
 
 ## Qualitätsziele
 
