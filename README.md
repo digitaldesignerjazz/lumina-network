@@ -1,43 +1,46 @@
 # Lumina Network
 
+**Decentralized Peer-to-Peer Mesh Network Architecture**  
+Part of the Nexus / Lumina OS ecosystem
+
 **Dezentrale Peer-to-Peer Mesh-Netzwerkarchitektur**  
 Teil des Nexus / Lumina OS Ökosystems
 
-## Überblick
+## Overview / Überblick
 
-Lumina Network ist ein modular aufgebautes, selbstheilendes P2P-Netzwerk mit:
-- Kademlia-basiertem Discovery
-- Gossip-Protokoll für Status & Topologie
-- Multi-Path-Routing
-- Starker Kryptografie
-- Schwarmintelligenz-Schicht (Iktrasier)
-- KI-Agenten-Orchestrierung
-- Gateway-Layer für externe Systeme
-- **Yggdrasil als primärer Transport-Underlay**
+Lumina Network is a modular, self-healing P2P network featuring:
+- Kademlia-based discovery
+- Gossip protocol for status & topology
+- Multi-path routing
+- Strong cryptography
+- Swarm intelligence layer (Iktrasier)
+- AI agent orchestration
+- Gateway layer for external systems
+- **Yggdrasil as primary transport underlay**
 
-## Dokumentation
+## Documentation / Dokumentation
 
-| Kapitel | Titel | Status |
-|---------|-------|--------|
-| 1 | [Systemarchitektur](docs/01-systemarchitektur.md) | ✅ |
-| 2 | [Netzwerkarchitektur](docs/02-netzwerkarchitektur.md) | ✅ |
-| 3 | [Routing-Architektur](docs/03-routing-architektur.md) | ✅ |
-| 4 | [Nachrichtenformate im Detail](docs/04-nachrichtenformate.md) | ✅ |
-| 5 | [Yggdrasil-Integration](docs/05-yggdrasil-integration.md) | ✅ |
+| Chapter | German | English | Status |
+|---------|--------|---------|--------|
+| 1 | [Systemarchitektur](docs/01-systemarchitektur.md) | [System Architecture](docs/en/01-system-architecture.md) | ✅ |
+| 2 | [Netzwerkarchitektur](docs/02-netzwerkarchitektur.md) | [Network Architecture](docs/en/02-network-architecture.md) | ✅ |
+| 3 | [Routing-Architektur](docs/03-routing-architektur.md) | [Routing Architecture](docs/en/03-routing-architecture.md) | ✅ |
+| 4 | [Nachrichtenformate im Detail](docs/04-nachrichtenformate.md) | [Message Formats in Detail](docs/en/04-message-formats.md) | ✅ |
+| 5 | [Yggdrasil-Integration](docs/05-yggdrasil-integration.md) | [Yggdrasil Integration](docs/en/05-yggdrasil-integration.md) | ✅ |
 
-## Code-Prototypen
+## Code Prototypes / Code-Prototypen
 
-| Pfad | Beschreibung |
-|------|--------------|
-| `prototypes/lumina_node.py` | Erster minimaler Node-Skeleton (Nachrichtenformate + simulierte Yggdrasil-Schicht) |
+| Path | Description |
+|------|-------------|
+| `prototypes/lumina_node.py` | First minimal node skeleton (message formats + simulated Yggdrasil layer) |
 
-## Qualitätsziele
+## Quality Goals / Qualitätsziele
 
-- Hohe Verfügbarkeit
-- Geringe Latenz
-- Energieeffizienz
-- Skalierbarkeit
-- Starke Kryptografie
+- High availability
+- Low latency
+- Energy efficiency
+- Scalability
+- Strong cryptography
 
 ---
-*Sir, dieses Repository dient als öffentlicher Kern der Lumina Network Spezifikation.*
+*This repository serves as the public core of the Lumina Network specification.*
