@@ -1,112 +1,40 @@
 # Kapitel 7 – Kademlia-Implementierungsdetails
 
-Dieses Kapitel spezifiziert die konkrete Kademlia-Implementierung für die **aktive Discovery** in Lumina Network (Meilenstein M0.2).
+Aktive Discovery für Lumina Network (M0.2).
 
-## 7.1 Grundparameter (Lumina-Defaults)
+## 7.1 Defaults
 
-| Parameter              | Wert     | Begründung |
-|------------------------|----------|------------|
-| Identifier-Länge       | 256 Bit  | SHA-256 des Public Keys |
-| `k` (Bucket-Größe)     | 20       | Klassischer Kademlia-Wert, gute Robustheit |
-| `α` (Parallelität)     | 3        | Optimaler Trade-off zwischen Geschwindigkeit und Last |
-| `β` (Antwort-Kontakte) | 20 (`k`) | Volle k-nächsten zurückgeben |
-| Refresh-Intervall      | 60 min   | Bucket-Refresh |
-| Lookup-Timeout         | 5–8 s    | Pro paralleler Runde |
+256-Bit-IDs (SHA-256 des Public Keys), `k = 20`, `α = 3`, `β = k`, Refresh 60 min, Lookup-Timeout 5–8 s.
 
-## 7.2 XOR-Distanz
+## 7.2 XOR und Bucket-Index
 
 ```text
-distance(a, b) = a ⊕ b   (als Big-Endian Integer interpretiert)
+distance(a, b) = a ⊕ b   (Big-Endian Integer)
+bucket_index(0) = 0
+bucket_index(d) = min(floor(log2(d)), 255)
 ```
-
-Je kleiner der numerische Wert, desto „näher“ liegen die IDs.
 
 ## 7.3 k-Buckets
 
-Jeder Knoten hält bis zu 256 k-Buckets (einen pro Bit-Präfix-Länge).
+Bucket `i` hält Kontakte mit Distanz in `[2^i, 2^{i+1})`. Least-recently-seen first. Voller Bucket: LRS pingen, behalten wenn lebend, sonst ersetzen. PNS nur mit **lokal gemessener** RTT. Kein unsignierter Kontakt in die Tabelle.
 
-- Bucket `i` enthält Kontakte, deren Distanz im Bereich `[2^i , 2^{i+1})` liegt.
-- Maximal `k = 20` Kontakte pro Bucket.
-- Sortierung: **least-recently-seen first** (älteste zuerst).
+## 7.4 Iterativer FIND_NODE
 
-### Einfüge- / Ersetzungsregeln
+Loose Parallelism, stumme Nodes aus der Shortlist, Abbruch bei Distanz-Stagnation oder `k` Live-Kontakten.
 
-1. Bucket hat noch Platz → Kontakt einfach einfügen.
-2. Bucket ist voll:
-   - Den least-recently-seen Kontakt anpingen.
-   - Antwortet er → neuer Kontakt wird verworfen (oder an das Ende gestellt).
-   - Antwortet er nicht → least-recently-seen wird ersetzt.
-3. Optional (Lumina-Erweiterung): Proximity-Neighbor-Selection (bevorzuge Kontakte mit besserer gemessener Latenz).
+## 7.5 Wire-Format
 
-## 7.4 Iterativer Lookup (FIND_NODE)
+Request `0x10`: `{target, requester_id}`  
+Reply `0x11`: `{target, contacts[]}` mit `node_id`, `public_key`, `last_seen`, `rtt_ms`, optional `name` / `capabilities`.
 
-```text
-function iterativeFindNode(target):
-    shortlist ← α nächste bekannte Kontakte aus den k-Buckets
-    queried   ← leere Menge
+## 7.6 Refresh
 
-    while true:
-        // α parallele Anfragen an die noch nicht abgefragten nächsten Kontakte
-        results ← parallel FIND_NODE(target) an α Kontakte aus shortlist \ queried
+Stündlicher Lookup in jedem nicht-leeren Bucket. Seltener Zufalls-Lookup in leere ferne Buckets, wenn das Netz wächst.
 
-        queried ← queried ∪ angefragte Kontakte
+## 7.7 Stand im Prototyp
 
-        // Neue Kandidaten einfügen und nach Distanz sortieren
-        shortlist ← (shortlist ∪ results).sort_by_distance(target).take(k)
-
-        if keine näheren Kontakte mehr gefunden oder k erfolgreiche Antworten:
-            return die k nächsten live-Kontakte
-```
-
-### Wichtige Eigenschaften
-
-- **Loose Parallelism**: Die nächste Runde kann starten, sobald die ersten Antworten eintreffen (muss nicht auf alle α warten).
-- Nodes, die nicht antworten, werden vorübergehend aus der Shortlist entfernt.
-- Abbruch, wenn keine Verbesserung der Distanz mehr eintritt oder `k` live-Kontakte erreicht sind.
-
-## 7.5 FIND_NODE Nachrichtenformat (Erweiterung Kapitel 4)
-
-**Request (0x10)**
-```json
-{
-  "target": "hex256",
-  "requester_id": "hex256"
-}
-```
-
-**Reply (0x11)**
-```json
-{
-  "target": "hex256",
-  "contacts": [
-    {
-      "node_id": "hex256",
-      "public_key": "hex32",
-      "last_seen": 1724630000,
-      "rtt_ms": 14.2
-    },
-    ...
-  ]
-}
-```
-
-Maximal `k` Kontakte werden zurückgegeben, bereits nach Distanz zum Target sortiert.
-
-## 7.6 Bucket-Refresh
-
-- Alle 60 Minuten wird für jeden non-empty Bucket ein Lookup auf eine zufällige ID aus dem Bucket-Bereich durchgeführt.
-- Dadurch bleiben die Buckets frisch und das Netzwerk entdeckt neue Knoten.
-
-## 7.7 Integration in den Lumina-Prototyp
-
-Im nächsten Schritt wird der bestehende `LuminaNode` um folgende Komponenten erweitert:
-
-- `KBucket` / `RoutingTable`-Klasse
-- `iterative_find_node(target_id)`-Methode
-- Behandlung von `MSG_FIND_NODE` und `MSG_FIND_NODE_REPLY`
-- Periodischer Bucket-Refresh-Timer
-
-Passive Discovery (über Gossip) und aktive Discovery (Kademlia) bleiben bewusst getrennt, damit der Funkverkehr kontrollierbar bleibt.
+Umgesetzt in `prototypes/kademlia.py` und `prototypes/lumina_node.py` v0.3.0: RoutingTable, iterativer FIND_NODE, Handler für 0x10/0x11, LRS-Ping über HEARTBEAT.
+Offen auf Lumina-OS: systemd-Refresh, echter async Loose-Parallelism, S/Kademlia-disjunkte Pfade.
 
 ---
-*Kapitel 7 – Kademlia-Implementierungsdetails für M0.2*
+*Kapitel 7 – M0.2 / Prototyp v0.3*
