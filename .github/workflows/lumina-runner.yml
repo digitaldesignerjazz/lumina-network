@@ -1,0 +1,83 @@
+name: Lumina Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Aktion: backup, restart, start, status'
+        required: true
+        default: 'status'
+        type: choice
+        options:
+          - backup
+          - restart
+          - start
+          - status
+
+jobs:
+  lumina:
+    name: Lumina Network
+    runs-on: [self-hosted, linux, x64, lumina, hannover]
+    steps:
+      - name: Identity
+        run: |
+          echo "Lumina Network Runner online"
+          echo "Runner: $(hostname)"
+          echo "User: $(whoami)"
+          echo "Action: ${{ inputs.action }}"
+          date -u
+
+      - name: Backup Yggdrasil config
+        if: inputs.action == 'backup' || inputs.action == 'restart' || inputs.action == 'start'
+        run: |
+          set -e
+          TS=$(date +%Y%m%d-%H%M%S)
+          mkdir -p /opt/lumina/backups
+          if [ -f /etc/yggdrasil.conf ]; then
+            cp /etc/yggdrasil.conf "/opt/lumina/backups/yggdrasil.conf.$TS"
+            echo "Backup: /opt/lumina/backups/yggdrasil.conf.$TS"
+          else
+            echo "Keine /etc/yggdrasil.conf gefunden — überspringe Backup."
+          fi
+
+      - name: Apply overlay config
+        if: inputs.action == 'restart' || inputs.action == 'start'
+        run: |
+          set -e
+          if [ -f /opt/lumina/yggdrasil-overlay.conf ]; then
+            cp /opt/lumina/yggdrasil-overlay.conf /etc/yggdrasil.conf
+            echo "Overlay angewendet."
+          else
+            echo "Kein Overlay unter /opt/lumina/yggdrasil-overlay.conf — behalte bestehende Config."
+          fi
+
+      - name: Restart Yggdrasil daemon
+        if: inputs.action == 'restart' || inputs.action == 'start'
+        run: |
+          set -e
+          if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl restart yggdrasil || sudo systemctl restart yggdrasild || true
+          elif command -v service >/dev/null 2>&1; then
+            sudo service yggdrasil restart || true
+          else
+            echo "Kein systemctl/service — Daemon manuell prüfen."
+          fi
+          sleep 2
+
+      - name: Status report
+        run: |
+          set +e
+          echo "=== Lumina Network Status ==="
+          if command -v yggdrasilctl >/dev/null 2>&1; then
+            echo "-- getSelf --"
+            yggdrasilctl getSelf 2>/dev/null || echo "getSelf nicht verfügbar"
+            echo "-- getPeers --"
+            yggdrasilctl getPeers 2>/dev/null || echo "getPeers nicht verfügbar"
+            echo "-- getTree --"
+            yggdrasilctl getTree 2>/dev/null || echo "getTree nicht verfügbar"
+          else
+            echo "yggdrasilctl nicht installiert."
+          fi
+          echo "-- letzte Backups --"
+          ls -lt /opt/lumina/backups 2>/dev/null | head -n 5 || echo "Kein Backup-Verzeichnis."
+          echo "=== Ende Status ==="
