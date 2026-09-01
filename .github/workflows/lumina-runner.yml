@@ -13,25 +13,120 @@ on:
           - restart
           - start
           - status
+          - health
+  schedule:
+    # Täglich 03:17 UTC — Backup + Health-Check, unabhängig von Sir
+    - cron: '17 3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/lumina-runner.yml'
+      - 'scripts/**'
+      - 'config/**'
+
+concurrency:
+  group: lumina-overlay
+  cancel-in-progress: false
 
 jobs:
   lumina:
-    runs-on: ${{ vars.HANNOVER_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HANNOVER_RUNNER || '[self-hosted, linux, x64, lumina, hannover]' }}
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Lumina Runner action (no-op on hosted)
+      - name: Detect runner capability
+        id: cap
         run: |
-          echo "action=${{ inputs.action }}"
-          echo "HANNOVER_RUNNER=${{ vars.HANNOVER_RUNNER }}"
-          echo "Auf ubuntu-latest: kein Yggdrasil, kein Daemon — nur Status-Report."
-          echo "Sobald der Self-Hosted-Runner 'hannover-primary' online ist, greift er automatisch."
-
-      - name: Status report
-        run: |
-          echo "## Lumina Runner Status"
+          set +e
+          if [ -c /dev/net/tun ] && command -v yggdrasil >/dev/null 2>&1; then
+            echo "mode=node" >> "$GITHUB_OUTPUT"
+            echo "Echter Hannover-Knoten erkannt."
+          else
+            echo "mode=cloud" >> "$GITHUB_OUTPUT"
+            echo "Cloud-Fallback: kein /dev/net/tun, kein yggdrasil-Binary."
+          fi
           echo "Runner: ${{ runner.name }}"
           echo "Labels: ${{ runner.labels }}"
-          echo "Aktion: ${{ inputs.action }}"
-          echo "Hinweis: echter Overlay-Apply nur auf dem Hannover-Knoten."
+
+      - name: Ensure directories
+        if: steps.cap.outputs.mode == 'node'
+        run: |
+          sudo mkdir -p /opt/lumina/backups /opt/lumina/logs
+          sudo chown -R "$(whoami):$(whoami)" /opt/lumina
+
+      - name: Backup config
+        if: steps.cap.outputs.mode == 'node' && (inputs.action == 'backup' || inputs.action == 'restart' || inputs.action == 'start' || github.event_name == 'schedule')
+        run: |
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          if [ -f /etc/yggdrasil.conf ]; then
+            cp /etc/yggdrasil.conf "/opt/lumina/backups/yggdrasil.conf.$TS"
+            # Rotation: älteste 30 behalten
+            ls -1t /opt/lumina/backups/yggdrasil.conf.* 2>/dev/null | tail -n +31 | xargs -r rm -f
+            echo "Backup: yggdrasil.conf.$TS"
+          else
+            echo "Kein /etc/yggdrasil.conf — überspringe."
+          fi
+          if [ -f /opt/lumina/yggdrasil-overlay.conf ]; then
+            cp /opt/lumina/yggdrasil-overlay.conf "/opt/lumina/backups/overlay.conf.$TS"
+          fi
+
+      - name: Apply overlay config
+        if: steps.cap.outputs.mode == 'node' && (inputs.action == 'start' || inputs.action == 'restart')
+        run: |
+          if [ -f /opt/lumina/yggdrasil-overlay.conf ]; then
+            sudo cp /opt/lumina/yggdrasil-overlay.conf /etc/yggdrasil.conf
+            echo "Overlay angewendet."
+          else
+            echo "Keine Overlay-Config unter /opt/lumina/yggdrasil-overlay.conf."
+          fi
+
+      - name: Restart daemon
+        if: steps.cap.outputs.mode == 'node' && (inputs.action == 'restart' || inputs.action == 'start')
+        run: |
+          if systemctl list-unit-files | grep -q yggdrasil; then
+            sudo systemctl restart yggdrasil
+          else
+            # Fallback: manuell
+            sudo pkill -f yggdrasil || true
+            sleep 1
+            nohup yggdrasil -useconffile /etc/yggdrasil.conf >/opt/lumina/logs/yggdrasil.log 2>&1 &
+          fi
+          sleep 2
+          systemctl is-active yggdrasil || echo "Daemon gestartet (manuell)."
+
+      - name: Health check
+        if: steps.cap.outputs.mode == 'node' && (inputs.action == 'health' || inputs.action == 'status' || inputs.action == 'restart' || inputs.action == 'start' || github.event_name == 'schedule')
+        run: |
+          echo "## Lumina Health"
+          if command -v yggdrasilctl >/dev/null 2>&1; then
+            yggdrasilctl getSelf || true
+            yggdrasilctl getPeers || true
+            yggdrasilctl getTree || true
+          else
+            echo "yggdrasilctl fehlt im PATH."
+          fi
+          systemctl status yggdrasil --no-pager || true
+          ls -lt /opt/lumina/backups | head -5
+
+      - name: Cloud fallback report
+        if: steps.cap.outputs.mode == 'cloud'
+        run: |
+          echo "## Lumina Runner — Cloud-Modus"
+          echo "Aktion: ${{ inputs.action || 'schedule' }}"
+          echo "Kein /dev/net/tun, kein yggdrasil-Binary auf diesem Runner."
+          echo "Echte Overlay-Operationen erfordern den Self-Hosted-Runner 'hannover-primary'."
+          echo "Workflow bleibt im Repo versioniert und feuert automatisch, sobald der Knoten online ist."
+          date -u
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Lumina Runner"
+            echo "- Modus: ${{ steps.cap.outputs.mode }}"
+            echo "- Aktion: ${{ inputs.action || 'schedule' }}"
+            echo "- Runner: ${{ runner.name }}"
+            echo "- Event: ${{ github.event_name }}"
+          } >> "$GITHUB_STEP_SUMMARY"
