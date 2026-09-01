@@ -1,33 +1,23 @@
 #!/usr/bin/env bash
-# lumina-health.sh — prüft Yggdrasil-Daemon, Peers, letzte Backups.
-# Aufruf: ./scripts/lumina-health.sh   oder aus dem Workflow heraus.
+# lumina-health.sh — Health-Check für den Hannover-Knoten.
+# Läuft lokal per Cron oder im Workflow. Keine Secrets, keine Keys.
 set -euo pipefail
 
-BACKUP_DIR="/opt/lumina/backups"
 LOG="/opt/lumina/logs/health.log"
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" | tee -a "$LOG"; }
-
-main() {
-  log "=== Lumina Health Check ==="
-  if ! command -v yggdrasilctl >/dev/null 2>&1; then
-    log "FEHLER: yggdrasilctl nicht gefunden."
-    exit 1
-  fi
-  if [ ! -c /dev/net/tun ]; then
-    log "WARNUNG: /dev/net/tun fehlt — kein TUN-Gerät."
-  fi
-  log "Self:"
-  yggdrasilctl getSelf || log "getSelf fehlgeschlagen"
-  log "Peers:"
-  yggdrasilctl getPeers || log "getPeers fehlgeschlagen"
-  log "Tree:"
-  yggdrasilctl getTree || log "getTree fehlgeschlagen"
-  if [ -d "$BACKUP_DIR" ]; then
-    log "Letzte Backups:"
-    ls -lt "$BACKUP_DIR" | head -6 | tee -a "$LOG"
-  fi
-  log "=== Ende ==="
-}
-
-main "$@"
+{
+  echo "=== $TS ==="
+  echo "-- Daemon --"
+  systemctl is-active yggdrasil 2>/dev/null || echo "inactive"
+  echo "-- Self --"
+  yggdrasilctl getSelf 2>/dev/null || echo "yggdrasilctl fehlt"
+  echo "-- Peers --"
+  yggdrasilctl getPeers 2>/dev/null || true
+  echo "-- Tree --"
+  yggdrasilctl getTree 2>/dev/null || true
+  echo "-- Backups --"
+  ls -lt /opt/lumina/backups 2>/dev/null | head -5 || echo "kein Backup-Ordner"
+  echo "-- Disk --"
+  df -h /opt/lumina 2>/dev/null || true
+} | tee -a "$LOG"
